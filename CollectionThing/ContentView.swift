@@ -36,7 +36,7 @@ struct WrappedLayout<Item: Identifiable> {
     let rowHeight: CGFloat
     
     init(items: [Item], columns: Int) {
-        let rowHeight: CGFloat = 40
+        let rowHeight: CGFloat = 80
         
         func rangeForRow(_ index: Int) -> Range<Int> {
             return ((index * columns) ..< ((index + 1) * columns)).clamped(to: items.indices)
@@ -127,8 +127,6 @@ struct ContentView: View {
                                     ItemView(item: item)
                                 }
                             }
-                            .frame(idealWidth: self.fixedBounds.width, idealHeight: row.frame.height)
-                            .fixedSize()
                         }
                     }
                     .frame(
@@ -140,7 +138,6 @@ struct ContentView: View {
                         x: self.fixedBounds.midX,
                         y: self.visibleRowBounds.midY
                     )
-                    .fixedSize()
                 }
             }
             .background(FixedView().edgesIgnoringSafeArea(.all))
@@ -152,15 +149,23 @@ struct ContentView: View {
                     self.fixedBounds = values[.fixedView] ?? .zero
                 }
                 
+                #if os(iOS)
                 let visibleRect = CGRect(
                     x: movingBounds.origin.x,
                     y: (fixedBounds.origin.y - movingBounds.origin.y),
                     width: fixedBounds.width,
                     height: fixedBounds.height)
+                #else
+                let visibleRect = CGRect(
+                    x: movingBounds.origin.x,
+                    y: movingBounds.origin.y - fixedBounds.height,
+                    width: fixedBounds.width,
+                    height: fixedBounds.height)
+                #endif
                 
                 let queryRect = visibleRect.insetBy(dx: 0, dy: -(visibleRect.height / 8))
                 
-                if boundsDirty || self.lastQueryRect.isEmpty || self.lastQueryRect.intersection(queryRect).height < (visibleRect.height * 1.5) {
+                if boundsDirty || self.lastQueryRect.isEmpty || self.lastQueryRect.intersection(queryRect).height < (visibleRect.height * 1.2) {
                     self.lastQueryRect = queryRect
                     
                     let rows = self.store.value.rows(in: queryRect)

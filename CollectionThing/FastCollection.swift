@@ -18,16 +18,18 @@ fileprivate struct WrappedLayout<Item: Identifiable> {
 
     /// A model representing the row of items
     struct Row: Identifiable {
-        let id: Int
+        let id: [Item.ID]
         let frame: CGRect
         let items: ArraySlice<Item>
 
-        func translatingY(_ y: CGFloat) -> Row {
-            return Row(id: id, frame: frame.offsetBy(dx: 0, dy: y), items: items)
+        init(frame: CGRect, items: ArraySlice<Item>) {
+            self.id = items.map { $0.id }
+            self.frame = frame
+            self.items = items
         }
 
         func width(_ width: CGFloat) -> Row {
-            return Row(id: id, frame: CGRect(x: frame.origin.x, y: frame.origin.y, width: width, height: frame.size.height), items: items)
+            return Row(frame: CGRect(x: frame.origin.x, y: frame.origin.y, width: width, height: frame.size.height), items: items)
         }
     }
 
@@ -51,7 +53,8 @@ fileprivate struct WrappedLayout<Item: Identifiable> {
         let rowCount = (remainder > 0) ? quotient + 1 : quotient
 
         self.items = items
-        self.rows = (0 ..< rowCount).map { Row(id: $0, frame: rowFrames[$0], items: items[rangeForRow($0)]) }
+        self.rows = (0..<rowCount).map { Row(frame: rowFrames[$0], items: items[rangeForRow($0)]) }
+
         self.columns = columns
         self.contentSize = CGSize(width: 1, height: rowFrames.map { $0.height }.reduce(0, +))
     }
@@ -75,12 +78,20 @@ public struct FastCollection<T: Identifiable, V: View>: View {
     @State private var fixedBounds: CGRect = .zero
     @State private var lastQueryRect: CGRect = .zero
     @State private var visibleRowBounds: CGRect = .zero
-    @State private var visibleRows: [WrappedLayout<T>.Row] = []
+
+    private var visibleRows: [WrappedLayout<T>.Row] {
+        let queryRectWithBuffer = CGRect(x: lastQueryRect.minX,
+                                         y: lastQueryRect.minY - self.buffer,
+                                         width: lastQueryRect.width,
+                                         height: lastQueryRect.height + 2 * self.buffer)
+        return self.layout.rows(in: queryRectWithBuffer)
+    }
+
 
     public init(items: [T], columns: Int = 1, buffer: CGFloat = 0, itemHeight: CGFloat, viewForItem: @escaping (T) -> V) {
         self.init(items: items, columns: columns, buffer: buffer, heightForItem: { _ in itemHeight }, viewForItem: viewForItem)
     }
-    
+
     public init(items: [T], columns: Int = 1, buffer: CGFloat = 0, heightForItem: (T) -> CGFloat, viewForItem: @escaping (T) -> V) {
         self.layout = WrappedLayout<T>(items: items, columns: columns, heightForItem: heightForItem)
         self.viewForItem = viewForItem
@@ -156,7 +167,6 @@ public struct FastCollection<T: Identifiable, V: View>: View {
                 let bounds = (rows.first?.frame ?? .zero).union(rows.last?.frame ?? .zero)
 
                 if rows.map({ $0.id }) != self.visibleRows.map({ $0.id }) {
-                    self.visibleRows = rows
                     self.visibleRowBounds = bounds
                 }
             }

@@ -66,7 +66,21 @@ fileprivate struct WrappedLayout<Item: Identifiable> {
     }
 
     func rows(in rect: CGRect) -> [Row] {
-        return rows.filter { $0.frame.intersects(rect) }.map { $0.width(rect.width) }
+        var returnValue = [Row]()
+        let minY = rect.minY
+        let maxY = rect.maxY
+        for row in rows {
+            if row.frame.maxY >= minY {
+                returnValue.append(row.width(rect.width))
+            }
+
+            if row.frame.minY > maxY {
+                // This is an optimization. If we've already gone far enough, there's no point in keeping checking.
+                return returnValue
+            }
+        }
+
+        return returnValue
     }
 }
 
@@ -77,7 +91,6 @@ public struct FastCollection<T: Identifiable, V: View>: View {
 
     @State private var fixedBounds: CGRect = .zero
     @State private var lastQueryRect: CGRect = .zero
-    @State private var visibleRowBounds: CGRect = .zero
 
     private var visibleRows: [WrappedLayout<T>.Row] {
         let queryRectWithBuffer = CGRect(x: lastQueryRect.minX,
@@ -99,7 +112,11 @@ public struct FastCollection<T: Identifiable, V: View>: View {
     }
 
     public var body: some View {
-        ScrollView {
+        // Calculate these once per body call as they could be expensive calls
+        let visibleRows = self.visibleRows
+        let visibleRowBounds = (visibleRows.first?.frame ?? .zero).union(visibleRows.last?.frame ?? .zero)
+
+        return ScrollView {
             ZStack(alignment: .top) {
                 MovingView()
                     .frame(height: 0)
@@ -112,7 +129,7 @@ public struct FastCollection<T: Identifiable, V: View>: View {
                     .hidden()
 
                 VStack(spacing: 0) {
-                    ForEach(self.visibleRows) { row in
+                    ForEach(visibleRows) { row in
                         HStack(spacing: 0) {
                             ForEach(row.items) { item in
                                 self.viewForItem(item)
@@ -122,12 +139,12 @@ public struct FastCollection<T: Identifiable, V: View>: View {
                 }
                 .frame(
                     width: self.fixedBounds.width,
-                    height: self.visibleRowBounds.height,
+                    height: visibleRowBounds.height,
                     alignment: .topLeading
                 )
                     .position(
                         x: self.fixedBounds.midX,
-                        y: self.visibleRowBounds.midY
+                        y: visibleRowBounds.midY
                 )
             }
         }
@@ -158,17 +175,6 @@ public struct FastCollection<T: Identifiable, V: View>: View {
 
             if boundsDirty || self.lastQueryRect.isEmpty || self.lastQueryRect.intersection(queryRect).height < (visibleRect.height * 1.2) {
                 self.lastQueryRect = queryRect
-
-                let queryRectWithBuffer = CGRect(x: queryRect.minX,
-                                                 y: queryRect.minY - self.buffer,
-                                                 width: queryRect.width,
-                                                 height: queryRect.height + 2 * self.buffer)
-                let rows = self.layout.rows(in: queryRectWithBuffer)
-                let bounds = (rows.first?.frame ?? .zero).union(rows.last?.frame ?? .zero)
-
-                if rows.map({ $0.id }) != self.visibleRows.map({ $0.id }) {
-                    self.visibleRowBounds = bounds
-                }
             }
         }
     }
